@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>📊 VPN 每週流量報表</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { color: #2c3e50; }
+    input[type="file"] { margin: 12px 0; }
+    table { border-collapse: collapse; width: 100%; margin-top: 16px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    th { background: #f5f5f5; }
+    .highlight { margin-top: 12px; font-weight: bold; color: #d35400; }
+    .copyblock { margin-top: 16px; white-space: pre-line; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h1>📊 VPN 每週流量報表</h1>
+  <br>【請上傳EyeSee下載之檔案】<br>
+  <input type="file" id="upload" accept=".xlsx" />
+
+  <div id="output"></div>
+
+  <script>
+    function formatDate(d) {
+      return d.toLocaleDateString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit" });
+    }
+    function weekdayStr(d) {
+      const map = { "Monday":"(一)","Tuesday":"(二)","Wednesday":"(三)","Thursday":"(四)","Friday":"(五)","Saturday":"(六)","Sunday":"(日)" };
+      return map[d.toLocaleDateString("en-US",{weekday:"long"})];
+    }
+
+    document.getElementById('upload').addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: "array" });
+
+      // 固定讀取第1個工作表 (index=0)，跳過前9列
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const json = XLSX.utils.sheet_to_json(sheet, { defval:null, range:9 });
+
+      if (!json.length) {
+        document.getElementById("output").innerHTML = "<p class='highlight'>讀不到資料，請確認表格內容。</p>";
+        return;
+      }
+
+      // 偵測欄位
+      const sample = json[0];
+      const timeCol = Object.keys(sample).find(k => k.includes("時間"));
+      const inCol = Object.keys(sample).find(k => k.includes("流入"));
+      const outCol = Object.keys(sample).find(k => k.includes("流出"));
+
+      if (!timeCol || !inCol || !outCol) {
+        document.getElementById("output").innerHTML = "<p class='highlight'>找不到時間/流入/流出欄位。</p>";
+        return;
+      }
+
+      // 整理資料
+      const rows = json.map(r => {
+        const t = new Date(r[timeCol]);
+        return {
+          日期: formatDate(t),
+          流入: Number(r[inCol]) / 1000,
+          流出: Number(r[outCol]) / 1000
+        };
+      });
+
+      // 依日期分組平均
+      const byDate = {};
+      rows.forEach(r => {
+        if (!byDate[r.日期]) byDate[r.日期] = [];
+        byDate[r.日期].push(r);
+      });
+
+      const dailyAvg = Object.entries(byDate).map(([日期, group]) => {
+        const avgIn = group.reduce((s,x)=>s+x.流入,0)/group.length;
+        const avgOut = group.reduce((s,x)=>s+x.流出,0)/group.length;
+        return { 日期, 平均流入: avgIn.toFixed(2), 平均流出: avgOut.toFixed(2) };
+      });
+
+      // 找最大平均流入/流出
+      const maxIn = dailyAvg.reduce((a,b)=>parseFloat(a.平均流入)>=parseFloat(b.平均流入)?a:b);
+      const maxOut = dailyAvg.reduce((a,b)=>parseFloat(a.平均流出)>=parseFloat(b.平均流出)?a:b);
+      let maxDate, maxValue;
+      if (parseFloat(maxIn.平均流入) >= parseFloat(maxOut.平均流出)) {
+        maxDate = maxIn.日期; maxValue = maxIn.平均流入;
+      } else {
+        maxDate = maxOut.日期; maxValue = maxOut.平均流出;
+      }
+
+      // 週平均流入
+      const weeklyAvgIn = (dailyAvg.reduce((s,r)=>s+parseFloat(r.平均流入),0)/dailyAvg.length).toFixed(1);
+
+      // 輸出表格
+      let html = "<table><tr><th>日期</th><th>平均流入 (Mbps)</th><th>平均流出 (Mbps)</th></tr>";
+      dailyAvg.forEach(r=>{
+        html += `<tr><td>${r.日期}</td><td>${r.平均流入}</td><td>${r.平均流出}</td></tr>`;
+      });
+      html += "</table>";
+
+      // 🔥 本週最高流量
+      const dateObj = new Date(maxDate);
+      html += `<div class="highlight">🔥 本週最高流量落在${dateObj.toLocaleDateString("zh-TW",{month:"2-digit",day:"2-digit"})}${weekdayStr(dateObj)}流量為 ${maxValue} Mbps</div>`;
+      html += `<div>📅 週平均流量為 ${weeklyAvgIn} Mbps (${(weeklyAvgIn/6).toFixed(1)}%)</div>`;
+
+      // 📋 單獨輸出(複製用)
+      html += `<div class="copyblock">📋 單獨輸出(複製用)：\n平均流入 (Mbps)\n`;
+      dailyAvg.forEach(r=>{ html += ` ${r.平均流入}\n`; });
+      html += `平均流出 (Mbps)\n`;
+      dailyAvg.forEach(r=>{ html += ` ${r.平均流出}\n`; });
+      html += `</div>`;
+
+      document.getElementById("output").innerHTML = html;
+    });
+  </script>
+</body>
+</html>

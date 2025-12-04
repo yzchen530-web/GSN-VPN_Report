@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>📊 GSN 每週流量報表</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { color: #2c3e50; }
+    input[type="file"] { margin: 12px 0; }
+    table { border-collapse: collapse; width: 100%; margin-top: 16px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    th { background: #f5f5f5; }
+    .highlight { margin-top: 12px; font-weight: bold; color: #d35400; }
+    .copyblock { margin-top: 16px; white-space: pre-line; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h1>📊 GSN 每週流量報表</h1>
+  <br>【請上傳GSN下載之檔案】<br>
+  <input type="file" id="upload" accept=".xlsx" />
+
+  <div id="output"></div>
+
+  <script>
+    function formatDateYYYYMMDD(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}/${m}/${day}`;
+    }
+
+    function formatHHMM(d) {
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return `${hh}:${mm}`;
+    }
+
+    function parseToDate(val) {
+      if (val instanceof Date) return val;
+      if (typeof val === "number") {
+        const o = XLSX.SSF.parse_date_code(val);
+        if (o) return new Date(Date.UTC(o.y, o.m - 1, o.d, o.H || 0, o.M || 0, o.S || 0));
+      }
+      const d = new Date(val);
+      return isNaN(d) ? null : d;
+    }
+
+    function valueToMbps(rawVal, columnName) {
+      if (rawVal == null || rawVal === "") return null;
+      const v = Number(rawVal);
+      if (isNaN(v)) return null;
+      const name = (columnName || "").toLowerCase();
+      if (name.includes("kbps")) return v / 1000;
+      if (name.includes("mbps")) return v;
+      if (v >= 1_000_000) return v / 1_000_000; // bps
+      if (v >= 1_000) return v / 1000;          // Kbps
+      return v;                                 // Mbps
+    }
+
+    function pickColumn(obj, candidates) {
+      for (const key of Object.keys(obj)) {
+        const lower = key.toLowerCase();
+        if (candidates.some(c => lower.includes(c))) return key;
+      }
+      return null;
+    }
+
+    document.getElementById('upload').addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      try {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: "array" });
+
+        // 固定讀取第2個工作表 (index=1)
+        const sheetName = workbook.SheetNames[1];
+        const sheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(sheet, { defval: null });
+
+        if (!json.length) {
+          document.getElementById("output").innerHTML = "<p class='highlight'>讀不到資料，請確認表格內容。</p>";
+          return;
+        }
+
+        const sample = json[0];
+        const timeCol = pickColumn(sample, ["time", "時間", "timestamp", "date"]);
+        const outCol = pickColumn(sample, ["out", "流出", "流量", "上行", "下行"]);
+
+        if (!timeCol || !outCol) {
+          document.getElementById("output").innerHTML =
+            "<p class='highlight'>找不到時間或流量欄位，請確認表頭。</p>";
+          return;
+        }
+
+        const rows = json.map(r => {
+          const t = parseToDate(r[timeCol]);
+          const mbps = valueToMbps(r[outCol], outCol);
+          if (!t || mbps == null) return null;
+          return { time: t, dateKey: formatDateYYYYMMDD(t), mbps };
+        }).filter(Boolean);
+
+        const byDate = new Map();
+        for (const r of rows) {
+          if (!byDate.has(r.dateKey)) byDate.set(r.dateKey, []);
+          byDate.get(r.dateKey).push(r);
+        }
+
+        const results = [];
+        for (const [dateKey, group] of byDate.entries()) {
+          const avg = group.reduce((s, x) => s + x.mbps, 0) / group.length;
+          const maxRow = group.reduce((a, b) => (a.mbps >= b.mbps ? a : b));
+          results.push({
+            日期: dateKey,
+            最大訊務時間: formatHHMM(maxRow.time),
+            最大訊務量_Mbps: Number(maxRow.mbps.toFixed(2)),
+            當日平均訊務量_Mbps: Number(avg.toFixed(2))
+          });
+        }
+
+        const top7 = results.sort((a, b) => a.日期.localeCompare(b.日期)).slice(0, 7);
+        const weeklyAvg = top7.reduce((s, r) => s + r.當日平均訊務量_Mbps, 0) / top7.length;
+        const weeklyMax = top7.reduce((a, b) => (a.最大訊務量_Mbps >= b.最大訊務量_Mbps ? a : b));
+
+        // 星期對照表
+        const weekdayMap = {
+          "Monday": "(一)",
+          "Tuesday": "(二)",
+          "Wednesday": "(三)",
+          "Thursday": "(四)",
+          "Friday": "(五)",
+          "Saturday": "(六)",
+          "Sunday": "(日)"
+        };
+        const dateObj = new Date(weeklyMax.日期);
+        const weekdayStr = weekdayMap[dateObj.toLocaleDateString("en-US", { weekday: "long" })];
+
+        let html = "<table><tr><th>日期</th><th>最大訊務時間</th><th>最大訊務量(Mbps)</th><th>當日平均訊務量(Mbps)</th></tr>";
+        for (const r of top7) {
+          html += `<tr><td>${r.日期}</td><td>${r.最大訊務時間}</td><td>${r.最大訊務量_Mbps}</td><td>${r.當日平均訊務量_Mbps}</td></tr>`;
+        }
+        html += "</table>";
+
+        // 🔥 本週最高流量輸出格式：MM/DD(週幾)
+        html += `<div class="highlight">🔥 本週最高流量落在${dateObj.toLocaleDateString("zh-TW", { month: "2-digit", day: "2-digit" })}${weekdayStr}流量為 ${weeklyMax.最大訊務量_Mbps} Mbps</div>`;
+        html += `<div>📅 週平均流量為 ${weeklyAvg.toFixed(1)} Mbps (${(weeklyAvg/10).toFixed(1)}%)</div>`;
+
+        // 📋 單獨輸出(複製用)
+        html += `<div class="copyblock">📋 單獨輸出(複製用)：\n最大訊務時間\n`;
+        top7.forEach(r => { html += ` ${r.最大訊務時間}\n`; });
+        html += `最大訊務量(Mbps)\n`;
+        top7.forEach(r => { html += ` ${r.最大訊務量_Mbps}\n`; });
+        html += `當日平均訊務量(Mbps)\n`;
+        top7.forEach(r => { html += ` ${r.當日平均訊務量_Mbps}\n`; });
+        html += `</div>`;
+
+        document.getElementById("output").innerHTML = html;
+      } catch (err) {
+        console.error(err);
+        document.getElementById("output").innerHTML =
+          "<p class='highlight'>讀取失敗，請確認檔案格式是否為 .xlsx，且表頭含時間與流量欄位。</p>";
+      }
+    });
+  </script>
+</body>
+</html>
