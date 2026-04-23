@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>健保資料外洩案-輿情儀表板</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* 藍、綠、橘 專業科技配色 */
+        :root {
+            --bg-color: #f8fafc;
+            --surface-color: #ffffff;
+            --text-main: #334155;
+            --text-muted: #64748b;
+            
+            /* 科技藍 (Primary/Theme) */
+            --primary: #0ea5e9; 
+            --primary-gradient: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
+            --primary-light: #f0f9ff;
+            --primary-border: #7dd3fc;
+
+            /* 警示橘 (Negative/Crisis) */
+            --danger: #ea580c; 
+            --danger-light: #ffedd5;
+            --danger-bg: #fff7ed;
+            
+            /* 修復綠 (Positive/Success) */
+            --success: #10b981; 
+            --success-light: #d1fae5;
+            --success-bg: #ecfdf5;
+            
+            --border: #e2e8f0;
+            --radius-xl: 24px;
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --shadow-sm: 0 4px 6px -1px rgba(0,0,0,0.05);
+            --shadow-md: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -2px rgba(0,0,0,0.04);
+            --shadow-hover: 0 20px 25px -5px rgba(14, 165, 233, 0.15), 0 10px 10px -5px rgba(14, 165, 233, 0.04);
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body { 
+            font-family: "Inter", "Nunito", system-ui, -apple-system, sans-serif; 
+            background: var(--bg-color); 
+            color: var(--text-main); 
+            margin: 0; 
+            padding: 30px 20px; 
+            line-height: 1.6;
+        }
+        
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        /* 漸層頂部導覽 */
+        header { 
+            background: var(--primary-gradient); 
+            border-radius: var(--radius-xl); 
+            padding: 32px 40px; 
+            margin-bottom: 36px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            box-shadow: 0 10px 25px -5px rgba(14, 165, 233, 0.25);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .header-title-wrapper h1 { 
+            margin: 0; 
+            font-size: 30px; 
+            font-weight: 900; 
+            letter-spacing: -0.5px; 
+            text-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .header-title-wrapper .subtitle { 
+            font-size: 15px; 
+            font-weight: 600; 
+            color: rgba(255, 255, 255, 0.95); 
+            margin-top: 8px; 
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .pulse-dot {
+            width: 10px; height: 10px; background: #fff; border-radius: 50%;
+            box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.8);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.8); }
+            70% { box-shadow: 0 0 0 8px rgba(255, 255, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+        }
+
+        /* 數據指標卡片 */
+        .metrics { display: flex; gap: 16px; flex-wrap: wrap;}
+        .metric-box { 
+            background: var(--surface-color); 
+            border: 1px solid rgba(0,0,0,0.05);
+            padding: 16px 24px; 
+            border-radius: var(--radius-lg);
+            text-align: center; 
+            min-width: 110px;
+            color: var(--text-main);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); /* 增加懸浮陰影 */
+        }
+        
+        .metric-box .val { font-size: 28px; font-weight: 900; line-height: 1.2; text-shadow: none;}
+        .metric-box .lbl { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-top: 4px;}
+
+        /* 高階總結區塊 */
+        .summary-panel { 
+            margin-bottom: 32px; 
+            background: var(--surface-color); 
+            border-radius: var(--radius-xl); 
+            padding: 32px; 
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border);
+        }
+        .summary-title { 
+            margin-top: 0; margin-bottom: 24px; font-size: 22px; font-weight: 800; 
+            display: flex; align-items: center; gap: 12px; color: var(--text-main);
+        }
+        .summary-title span { font-size: 26px; }
+        .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+        
+        .summary-card { 
+            padding: 24px; 
+            border-radius: var(--radius-lg); 
+            transition: var(--transition);
+            border: 2px solid transparent;
+        }
+        .summary-card:hover { transform: translateY(-5px); }
+        
+        /* 橘、藍、綠 摘要卡片 */
+        .card-danger { background: var(--danger-bg); border-color: var(--danger-light); }
+        .card-danger:hover { box-shadow: 0 10px 15px -3px rgba(234, 88, 12, 0.12); }
+        
+        .card-primary { background: var(--primary-light); border-color: var(--primary-border); }
+        .card-primary:hover { box-shadow: 0 10px 15px -3px rgba(14, 165, 233, 0.12); }
+        
+        .card-success { background: var(--success-bg); border-color: var(--success-light); }
+        .card-success:hover { box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.12); }
+
+        .summary-card-title { 
+            font-size: 17px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+        }
+        .sc-orange { color: var(--danger); }
+        .sc-blue { color: var(--primary); }
+        .sc-green { color: var(--success); }
+        .summary-card-text { font-size: 14.5px; color: #475569; text-align: justify; line-height: 1.7; font-weight: 500;}
+        
+        @media (max-width: 950px) { .summary-grid, header { flex-direction: column; align-items: stretch; } .metrics{margin-top:20px; justify-content: space-between;} .metric-box{flex:1;}}
+
+        /* 主要網格與圖表 */
+        .dashboard-grid { display: grid; grid-template-columns: 1fr; gap: 32px; }
+        .panel { 
+            background: var(--surface-color); 
+            border-radius: var(--radius-xl); 
+            padding: 32px; 
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border);
+        }
+        .chart-container { height: 400px; position: relative; }
+
+        /* 標籤控制項 */
+        .tab-controls { 
+            display: flex; gap: 12px; margin-bottom: 28px; align-items: center; justify-content: space-between;
+            background: var(--bg-color); padding: 8px; border-radius: 100px; 
+        }
+        .tab-group { display: flex; gap: 8px; }
+        .tab-btn { 
+            background: transparent; color: var(--text-muted); border: none; padding: 12px 24px; 
+            font-size: 15px; font-weight: 700; cursor: pointer; border-radius: 100px; transition: var(--transition);
+        }
+        .tab-btn.active { background: var(--surface-color); color: var(--primary); box-shadow: var(--shadow-sm); }
+        .tab-btn:hover:not(.active) { color: var(--text-main); background: rgba(255,255,255,0.5);}
+        
+        .action-btn {
+            background: var(--primary-gradient); color: #fff; border: none; padding: 12px 24px;
+            font-size: 15px; font-weight: 700; border-radius: 100px; cursor: pointer; transition: var(--transition);
+            box-shadow: 0 4px 10px rgba(14, 165, 233, 0.25);
+        }
+        .action-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(14, 165, 233, 0.35); }
+
+        /* 滾動區 */
+        .scroll-area { max-height: 650px; overflow-y: auto; padding-right: 15px; }
+        .scroll-area::-webkit-scrollbar { width: 8px; }
+        .scroll-area::-webkit-scrollbar-track { background: transparent; }
+        .scroll-area::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .scroll-area::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+        /* 垂直時間軸 */
+        .timeline { position: relative; padding-left: 36px; margin-left: 12px; }
+        .timeline::before { content: ''; position: absolute; left: 0; top: 15px; bottom: 0; width: 3px; background: #e2e8f0; border-radius: 3px; }
+        
+        .timeline-item { position: relative; margin-bottom: 32px; }
+        .timeline-item::before {
+            content: ''; position: absolute; left: -42px; top: 20px; width: 14px; height: 14px; 
+            border-radius: 50%; border: 4px solid var(--surface-color); z-index: 2;
+        }
+        .timeline-item.negative::before { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-light); }
+        .timeline-item.positive::before { background: var(--success); box-shadow: 0 0 0 3px var(--success-light); }
+        
+        .timeline-content { 
+            background: var(--surface-color); border: 2px solid var(--border); padding: 24px; 
+            border-radius: var(--radius-lg); transition: var(--transition);
+        }
+        .timeline-content:hover { 
+            box-shadow: var(--shadow-hover); transform: translateY(-4px) scale(1.01); border-color: var(--primary);
+        }
+        
+        .timeline-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+        .timeline-date { font-size: 14px; font-weight: 700; color: var(--text-muted); display: flex; align-items: center; gap: 6px; background: var(--bg-color); padding: 4px 12px; border-radius: 20px;}
+        
+        .badge-group { display: flex; gap: 8px; }
+        .badge { font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: 8px; display: flex; align-items: center; gap: 4px;}
+        .badge.media { background: #f1f5f9; color: var(--text-main); }
+        .badge.pos { background: var(--success-light); color: #047857; }
+        .badge.neg { background: var(--danger-light); color: #c2410c; }
+
+        .timeline-title { font-size: 19px; font-weight: 800; margin-bottom: 12px; line-height: 1.5; }
+        .timeline-title a { color: var(--text-main); text-decoration: none; transition: color 0.2s; }
+        .timeline-title a:hover { color: var(--primary); }
+        .link-icon { font-size: 14px; color: var(--primary); opacity: 0; transition: opacity 0.2s; margin-left: 6px; background: var(--primary-light); padding: 4px; border-radius: 50%;}
+        .timeline-content:hover .link-icon { opacity: 1; }
+        
+        .timeline-summary { font-size: 15px; color: #475569; background: #f8fafc; padding: 14px 18px; border-radius: var(--radius-md); border-left: 4px solid #cbd5e1; font-weight: 500; }
+
+        /* 來源媒體清單美化 */
+        .source-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+        .source-col { background: var(--surface-color); padding: 0; border-radius: var(--radius-lg); }
+        .source-col h3 { 
+            margin-top: 0; padding-bottom: 16px; border-bottom: 3px solid var(--border); 
+            font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 10px; margin-bottom: 24px;
+        }
+        .source-col.neg h3 { border-bottom-color: var(--danger); }
+        .source-col.pos h3 { border-bottom-color: var(--success); }
+        
+        .media-group { margin-bottom: 20px; background: var(--bg-color); border-radius: var(--radius-lg); padding: 20px; border: 1px solid var(--border); transition: var(--transition);}
+        .media-group:hover { box-shadow: var(--shadow-sm); border-color: #cbd5e1; }
+        .media-group-title { 
+            margin: 0 0 16px 0; font-size: 17px; font-weight: 800; display: flex; justify-content: space-between; 
+            align-items: center; color: var(--text-main); padding-bottom: 12px; border-bottom: 2px dashed #cbd5e1;
+        }
+        .media-count-badge { background: var(--primary); color: white; padding: 4px 14px; border-radius: 20px; font-size: 13px; font-weight: 800; box-shadow: 0 2px 4px rgba(14, 165, 233, 0.25);}
+        .source-item { margin-bottom: 14px; padding-left: 20px; position: relative; transition: transform 0.2s;}
+        .source-item:hover { transform: translateX(6px); }
+        .source-item::before { content: '🚀'; position: absolute; left: 0; top: 1px; font-size: 12px; }
+        .source-item a { color: var(--text-main); text-decoration: none; font-size: 15px; font-weight: 600; display: block; margin-bottom: 4px;}
+        .source-item a:hover { color: var(--primary); }
+        .source-date { font-size: 13px; color: #94a3b8; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div class="header-title-wrapper">
+            <h1>健保資料外洩案．輿情儀表板</h1>
+            <div class="subtitle">
+                <div class="pulse-dot"></div>
+                112/01 — 115/03 
+            </div>
+        </div>
+        <div class="metrics" id="topMetrics"></div>
+    </header>
+
+    <div class="summary-panel">
+        <h2 class="summary-title"><span>💡</span> 核心事件總結 (Executive Summary)</h2>
+        <div class="summary-grid">
+            <div class="summary-card card-danger">
+                <div class="summary-card-title sc-orange">🟠 危機爆發與止血 (112/01)</div>
+                <div class="summary-card-text">案件爆發初期，前主秘等官員遭搜索約談，媒體大肆報導個資疑遭外流，引發國安疑慮與立委抨擊。健保署迅速祭出「調離主管職、封鎖權限、禁用USB」等內控機制，並以系統日誌證實「無資料攜出證據」，成功為首波公關危機迅速止血。</div>
+            </div>
+            <div class="summary-card card-primary">
+                <div class="summary-card-title sc-blue">🔵 制度修補與改革 (113-114年)</div>
+                <div class="summary-card-text">受洩密案推波助瀾，民團與學者強烈要求建立外部稽核。健保署順應社會輿論與憲法法庭判決，積極推動《健保資管條例》修法，並於114年正式推行「健保資料退出權」，將危機成功轉化為保障民眾隱私的實質制度進展。</div>
+            </div>
+            <div class="summary-card card-success">
+                <div class="summary-card-title sc-green">🟢 司法落幕與平反 (113-115年)</div>
+                <div class="summary-card-text">歷經三年嚴格的司法調查，北檢於113年首度確認「查無外流中國事證」給予不起訴處分。115年3月，高檢署正式駁回再議，全案不起訴確定。當事人出面洗刷共諜污名，證實當年指控多為烏龍，機關清白在司法定讞後獲得全面平反。</div>
+            </div>
+        </div>
+    </div>
+
+<div class="summary-panel">
+        <h2 class="summary-title"><span>🤖</span> AI 情感判定標準 (Sentiment Criteria)</h2>
+        <div class="summary-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+            <div class="summary-card card-danger">
+                <div class="summary-card-title sc-orange">🟠 負面聲量 (Negative) 判定條件</div>
+                <div class="summary-card-text">
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li><strong>觸發特徵：</strong>內鬼、洩密、國安漏洞、痛批、失靈、檢調約談。</li>
+                        <li style="margin-top: 8px;"><strong>判定脈絡：</strong>報導內容涉及檢調搜索、立委或民團嚴厲咎責、引發公眾隱私恐慌，或凸顯機關內控機制失效時，系統將自動歸類為危機警訊。</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="summary-card card-success">
+                <div class="summary-card-title sc-green">🟢 正面聲量 (Positive) 判定條件</div>
+                <div class="summary-card-text">
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li><strong>觸發特徵：</strong>澄清、強化內控、不起訴、修法通過、退出權上路。</li>
+                        <li style="margin-top: 8px;"><strong>判定脈絡：</strong>報導著重於官方即時防護（如封鎖權限）、實質制度改革落地（如健保退出權修法），或司法最終查無實證還予清白時，視為形象修復指標。</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="panel chart-container">
+            <canvas id="crisisChart"></canvas>
+        </div>
+
+        <div class="panel list-container">
+            <div class="tab-controls">
+                <div class="tab-group">
+                    <button class="tab-btn active" id="tabTimeline" onclick="switchTab('timeline')">📌 重要事件時間軸</button>
+                    <button class="tab-btn" id="tabSource" onclick="switchTab('source')">📊 媒體聚類分析</button>
+                </div>
+                <button class="action-btn" onclick="renderTimeline()">顯示全部資料</button>
+            </div>
+            
+            <div id="newsList" class="scroll-area"></div>
+            <div id="sourceList" class="scroll-area" style="display: none;"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 新聞資料 ---
+const rawData = [
+        { date: "2023-01-09", title: "健保署爆「內鬼」 洩個資13年逾數十萬筆檢調約談3人", media: "中時新聞網", sentiment: "negative", link: "https://www.chinatimes.com/realtimenews/20230109003731-260402", summary: "檢調接獲線報發動搜索，將前主秘及兩名現職科長約談到案。此舉正式引爆了這起牽連甚廣的重大公關危機。" },
+        { date: "2023-01-09", title: "健保署員工涉洩漏民眾個資 檢調搜索約談3人", media: "中央社", sentiment: "negative", link: "https://www.cna.com.tw/news/asoc/202301090216.aspx", summary: "北檢指揮調查處，針對健保署人員涉嫌洩漏被保險人資料一案發動搜索。大動作搜索坐實了機關內控疏失。" },
+        { date: "2023-01-09", title: "健保署3職員涉偷查、外洩民眾個資 檢調搜索約談3人", media: "公視新聞網", sentiment: "negative", link: "https://www.youtube.com/watch?v=snzBINkBrfY", summary: "公共電視向全國播送了這起醜聞，使事件迅速成為全國焦點，擴大了民眾對隱私外流的恐慌。" },
+        { date: "2023-01-10", title: "健保署科長涉擅查警調人員個資13年 10萬元交保", media: "中央社", sentiment: "negative", link: "https://www.cna.com.tw/news/asoc/202301100014.aspx", summary: "檢方以涉嫌違反國家情報工作法為由，諭知涉案人10萬元交保。牽涉國安層級的案情發展，使社會恐慌加劇。" },
+        { date: "2023-01-10", title: "健保署3員工涉洩個資！科長謝玉蓮凌晨10萬交保", media: "中時新聞網", sentiment: "negative", link: "https://www.chinatimes.com/realtimenews/20230110000069-260402", summary: "檢方漏夜偵辦洩密案，複訊後涉案科長交保，前主秘暫獲無保請回。高層遭強制處分的新聞重創公信力。" },
+        { date: "2023-01-10", title: "健保署員工涉洩漏警調人員個資 暫調離原職限縮查閱權限", media: "中央社", sentiment: "positive", link: "https://www.cna.com.tw/news/asoc/202301100056.aspx", summary: "健保署發布聲明，強調已將涉案員工調離原職並限縮權限。這種即時的內部應變，旨在防堵漏洞初步止血。" },
+        { date: "2023-01-10", title: "健保署疑洩個資長達13年 涉案人員查詢權限被封", media: "公視新聞網", sentiment: "positive", link: "https://news.pts.org.tw/article/618257", summary: "為平息外界疑慮，健保署重申第一時間便已全面封鎖涉案員工查詢權限。試圖降低社會大眾對資料外洩的擔憂。" },
+        { date: "2023-01-10", title: "健保署被保險人個資遭洩 數位部：如涉資安將配合偵辦", media: "中央社", sentiment: "negative", link: "https://www.cna.com.tw/news/asoc/202301100348.aspx", summary: "數位部次長回應若發現涉及資安事件將全力配合。跨部會的回應凸顯了事件的高度政治敏感性與檢討壓力。" },
+        { date: "2023-01-10", title: "健保署個資外洩案 數位部澄清：非健保個資主管機關", media: "自由時報", sentiment: "negative", link: "https://ec.ltn.com.tw/article/breakingnews/4181034", summary: "面對批評，數位部發出聲明反駁指出該案屬於個資法範疇。政府內部急於釐清權責，顯示出此風暴帶來的政治壓力。" },
+        { date: "2023-01-10", title: "國安漏洞？健保署科長涉外洩情報人員個資長達13年", media: "TVBS新聞", sentiment: "negative", link: "https://news.tvbs.com.tw/local/2013447", summary: "電視媒體以「國安漏洞」為題大篇幅報導，引發各界對情報網曝光的憂慮，將單純資安事件上升至國家安全層級。" },
+        { date: "2023-01-10", title: "個資外洩健保署： 讀取紀錄永久保存隨時可查", media: "自由時報", sentiment: "positive", link: "https://news.ltn.com.tw/news/life/paper/1561952", summary: "針對涉嫌偷查並外洩被保險人個資長達13年的案件，健保署發出聲明，強調讀取紀錄永久保存，會配合司法調查並強化內部查核。" },
+        { date: "2023-01-10", title: "健保署疑洩個資案涉案人主管職遭撤、停用資料庫權限", media: "公視新聞網", sentiment: "positive", link: "https://news.pts.org.tw/article/618257", summary: "健保署證實已將涉嫌洩漏個資的相關人員拔除主管職，並停用其接觸健保資料庫的權限，試圖快速平息風波。" },
+        { date: "2023-01-11", title: "獨家》健保署追官員洩個資案 初步清查有2人13年查逾16萬筆", media: "自由時報", sentiment: "negative", link: "https://news.ltn.com.tw/news/life/breakingnews/4181143", summary: "媒體獨家報導內部清查結果，指出有2人在13年間異常查詢逾16萬筆個資。驚人數量讓內部管理漏洞無所遁形。" },
+        { date: "2023-01-11", title: "健保署爆洩查個資內鬼 官員涉犯國家情報工作法", media: "自由時報", sentiment: "negative", link: "https://news.ltn.com.tw/news/politics/paper/1562026", summary: "媒體報導檢調將朝違反情報法方向偵辦。將洩密案定調為國安層級事件，使得機關承受跨部會極大壓力。" },
+        { date: "2023-01-11", title: "健保署爆洩查個資案》防內鬼學者：登錄、查詢要有紀錄", media: "自由時報", sentiment: "negative", link: "https://news.ltn.com.tw/news/politics/paper/1562017", summary: "資安學者提出警告與建言，呼籲政府單位在系統登錄與查詢時必須留下完整日誌，凸顯了原有內控機制的不足。" },
+        { date: "2023-01-13", title: "社論》個資外洩是國安問題", media: "自由時報", sentiment: "negative", link: "https://talk.ltn.com.tw/article/paper/1562388", summary: "權威媒體發表社論，呼籲高層正視國安疏漏不應輕輕放下。社論的定調讓機關承受了更為嚴厲的社會檢視。" },
+        { date: "2023-05-04", title: "醫院個資外洩恐影響國安 監委申請調查", media: "中央社", sentiment: "negative", link: "https://www.cna.com.tw/news/aipl/202305040039.aspx", summary: "監察委員正式申請立案進行自動調查，釐清資安管理是否有重大行政違失。健保署面臨極大行政究責壓力。" },
+        { date: "2023-01-17", title: "傳健保署前主秘涉賣情治人員個資、海外藏鉅款 北檢不回應", media: "中央社", sentiment: "negative", link: "https://www.cna.com.tw/news/asoc/202301170226.aspx", summary: "週刊大篇幅報導前主秘疑在海外藏放逾10億鉅款。北檢不予回應。帶有強烈貪瀆色彩的爆料重創機關形象。" },
+        { date: "2023-01-17", title: "【健保洩密撼國本】出賣11情治系統人員個資 健保署前主祕神密帳戶爆鉅款匯入", media: "鏡週刊", sentiment: "negative", link: "https://www.mirrormedia.mg/story/20230117inv001", summary: "週刊專題指控涉案人出賣國家情治人員個資，將事件定調為撼動國本的共諜案。引發極大的社會恐慌。" },
+        { date: "2023-01-17", title: "職員傳集體盜賣民眾個資至中國 健保署調查、強化內控", media: "中央社", sentiment: "negative", link: "https://www.cna.com.tw/news/ahel/202301170085.aspx", summary: "針對盜賣個資至中國的指控，健保署強調檢調未公開此資訊，呼籲外界勿過度揣測。機關被迫對政治謠言進行防禦。" },
+        { date: "2023-01-17", title: "民進黨：健保署人員涉資料洩密案 支持政府徹查", media: "中央社", sentiment: "negative", link: "https://www.cna.com.tw/news/aipl/202301170265.aspx", summary: "執政黨發布聲明支持政府與檢調嚴查到底。連執政黨也強烈表態不護短，顯示機關面臨無法迴避的政治壓力。" },
+        { date: "2023-01-17", title: "濫查健保個資恐害情報人員曝光 檢調清查港澳金流疑點", media: "自由時報", sentiment: "negative", link: "https://news.ltn.com.tw/news/society/breakingnews/4187301", summary: "媒體引述消息指出檢調正持續追查涉案人員赴中國與港澳的相關金流，觸動了最敏感的兩岸政治神經。" },
+        { date: "2023-01-17", title: "健保官員涉賣個資疑雲 李伯璋：系統資料未被存取帶走", media: "自由時報", sentiment: "positive", link: "https://health.ltn.com.tw/article/breakingnews/4187363", summary: "健保署長李伯璋對外澄清，目前尚未發現系統被涉案人員以隨身碟存取資料帶走的證據，試圖降低外界擔憂。" },
+        { date: "2023-01-17", title: "涉洩個資風波爆升官 李伯璋：沒砍頭就不錯了還升官？", media: "自由時報", sentiment: "positive", link: "https://news.ltn.com.tw/news/life/breakingnews/4188243", summary: "針對網路流傳未涉案官員因案升官的耳語，健保署長強烈否認，並強調原涉案單位的主管皆已調離職務。" },
+        { date: "2023-01-18", title: "健保個資外洩案情升溫 前主祕被2度約談10萬交保", media: "自由時報", sentiment: "negative", link: "https://news.ltn.com.tw/news/society/breakingnews/4189286", summary: "案件從單純的刑法洩密案升級，台北地檢署再次訊問涉案3人，並諭令前主秘以10萬元交保並限制出境。" },
+        { date: "2023-01-18", title: "涉洩漏情治人員個資案 前健保署主秘10萬元交保", media: "中央社", sentiment: "negative", link: "https://www.cna.com.tw/news/asoc/202301180314.aspx", summary: "檢方再度約談前主秘，複訊後決定命其以10萬元交保並限制出境。高階官員再次遭處分讓大眾信任度降至冰點。" },
+        { date: "2023-01-18", title: "健保署爆內鬼！綠委痛批「內控失靈」要求嚴查", media: "民視新聞", sentiment: "negative", link: "https://today.line.me/tw/v2/amp/article/pe2M8o7", summary: "執政黨立委召開記者會痛批健保署內控機制完全失靈。來自同黨立委的抨擊讓行政部門承受巨大的究責壓力。" },
+        { date: "2023-01-18", title: "個資頻外洩 綠委促數發部聯手檢調檢討政府資安體質", media: "中央社", sentiment: "negative", link: "https://www.cna.com.tw/news/aipl/202301180133.aspx", summary: "立委要求數發部聯手檢調對各公務機關資安體質進行大體檢。事件升級為全國通案檢討，增加連帶政治壓力。" },
+        { date: "2023-01-19", title: "健保署稱無證據顯示個資外洩 涉案者為公務調檔未攜出", media: "公視新聞網", sentiment: "positive", link: "https://news.pts.org.tw/article/619728", summary: "官方公布內部調查，確認涉案人員雖有大量調檔，但無使用隨身碟攜出的痕跡。有效安撫了大眾對於資料外流的擔憂。" },
+        { date: "2023-01-19", title: "健保署：職員查閱13萬筆資料未存取攜出 無洩漏個資證據", media: "中央社", sentiment: "positive", link: "https://www.cna.com.tw/news/ahel/202301190048.aspx", summary: "健保署強調未發現存取攜出的紀錄，尚無外洩證據。這項以數據為基礎的澄清為危機迎來首次重大的正面轉折。" },
+        { date: "2023-01-19", title: "健保查閱個資祭出4強化策略 職員權限最小化原則", media: "中央社", sentiment: "positive", link: "https://www.cna.com.tw/news/ahel/202301190082.aspx", summary: "健保署祭出4項強化內控策略，包含嚴格落實查閱權限最小化。透過制度改革向外界展現重建防護網的決心。" },
+
+        // 113年：第一次不起訴與推動修法
+        { date: "2024-03-03", title: "健保數據目的外使用研擬 民眾可主動申請退出", media: "中央社", sentiment: "positive", link: "https://www.cna.com.tw/news/ahel/202403030046.aspx", summary: "為因應健保資料庫部分違憲的判決，衛福部正式預告專法草案，賦予民眾未來可主動行使資料退出的權利。" },
+        { date: "2024-07-28", title: "健保資料庫供學術用研擬 民眾可分項行使退出權", media: "中央社", sentiment: "positive", link: "https://www.cna.com.tw/news/ahel/202407280134.aspx", summary: "健保署長石崇良對外說明專法的規劃方向，未來民眾申請退出時將可採取「分項勾選」的方式以兼顧公衛需求。" },
+        { date: "2024-10-17", title: "健保資料庫退出權草案已送行政院審查", media: "中央社", sentiment: "positive", link: "https://www.cna.com.tw/news/ahel/202410170238.aspx", summary: "健保署長對外證實，包含退出權機制的法案草案已正式送交行政院進行審查。確保民眾資料自主性的法案推進。" },
+
+        // 114年：退出權正式上路
+        { date: "2025-05-15", title: "健保資料庫退出權8月上路 可註記不供學術使用", media: "中央社", sentiment: "positive", link: "https://www.cna.com.tw/news/ahel/202505150271.aspx", summary: "健保署宣布，健保資料庫退出權將於同年8月正式上路，讓民眾的個人健保資料能選擇不提供給學術研究使用。" },
+        { date: "2025-06-26", title: "健保資管條例立院初審 危害國安最重關10年", media: "中央社", sentiment: "positive", link: "https://www.cna.com.tw/news/ahel/202506260329.aspx", summary: "立法院初審通過健保資管條例草案。條文不僅明定退出權，更有鑑於過去的外洩案，大幅加重罰則防弊。" },
+        
+        // 115年：全案大結局
+        { date: "2026-03-04", title: "健保資料外洩案不起訴 前主秘：被抹紅3年、對我人格抹殺", media: "中時新聞網", sentiment: "positive", link: "https://www.chinatimes.com/realtimenews/20260304004283-260405", summary: "全案最終獲不起訴處分。前主秘接受專訪感嘆無端被抹紅為共諜。當事人的發聲突顯當年指控為烏龍，洗刷機關嫌疑。" },
+        { date: "2026-03-12", title: "遭週刊爆洩個資「抹紅」3年 前健保署主祕不起訴確定", media: "中時新聞網", sentiment: "positive", link: "https://www.chinatimes.com/realtimenews/20260312000982-260402", summary: "高檢署審查後正式駁回再議申請，全案最終以不起訴處分確定。高檢署的最終定讞為長達三年的司法調查劃下終止符。" },
+        { date: "2026-03-12", title: "「週刊抹紅」！健保署前主秘3人查無實證不起訴確定還清白", media: "TVBS新聞", sentiment: "positive", link: "https://news.tvbs.com.tw/local/3149034", summary: "電視媒體大幅報導不起訴結果，認定當年週刊爆料內容並非事實。司法判定徹底還給涉案官員與健保署清白，全劇終。" }
+    ];
+
+
+    // --- 日期排序與月份擷取 ---
+    rawData.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    rawData.forEach(item => {
+        item.monthKey = item.date.substring(0, 7); 
+    });
+
+    const totalCount = rawData.length;
+    const posCount = rawData.filter(d => d.sentiment === 'positive').length;
+    const negCount = totalCount - posCount;
+    const posRate = Math.round((posCount / totalCount) * 100);
+    
+    document.getElementById('topMetrics').innerHTML = `
+        <div class="metric-box m-total">
+            <div class="val" style="color: var(--primary);">${totalCount}</div>
+            <div class="lbl">新聞資料</div>
+        </div>
+        <div class="metric-box m-pos">
+            <div class="val" style="color: var(--success);">${posRate}%</div>
+            <div class="lbl">正向聲量比</div>
+        </div>
+        <div class="metric-box m-neg">
+            <div class="val" style="color: var(--danger);">112/01</div>
+            <div class="lbl">爆發峰值</div>
+        </div>
+    `;
+
+    const monthlyData = {};
+    rawData.forEach(item => {
+        if(!monthlyData[item.monthKey]) monthlyData[item.monthKey] = { pos: 0, neg: 0 };
+        item.sentiment === 'positive' ? monthlyData[item.monthKey].pos++ : monthlyData[item.monthKey].neg++;
+    });
+
+    const labels = Object.keys(monthlyData).sort();
+    const posData = labels.map(l => monthlyData[l].pos);
+    const negData = labels.map(l => monthlyData[l].neg);
+
+    const ctx = document.getElementById('crisisChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                { label: '負面聲量', backgroundColor: '#ea580c', data: negData, borderRadius: 6, barPercentage: 0.6 },
+                { label: '正面聲量', backgroundColor: '#10b981', data: posData, borderRadius: 6, barPercentage: 0.6 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                title: { display: false },
+                legend: { position: 'top', align: 'end', labels: { font: { family: 'Inter', weight: '600' }, usePointStyle: true, boxWidth: 8 } },
+                tooltip: { backgroundColor: '#1e293b', titleFont: { size: 14, family: 'Inter' }, bodyFont: {family: 'Inter'}, padding: 12, cornerRadius: 8 }
+            },
+            scales: { 
+                x: { stacked: true, grid: { display: false }, ticks: { font: { weight: '600', family: 'Inter' } } }, 
+                y: { stacked: true, beginAtZero: true, suggestedMax: 20, grid: { color: '#e2e8f0', borderDash: [4, 4] }, border: { display: false } } 
+            },
+            onClick: (event, elements) => {
+                if (elements.length > 0) {
+                    renderTimeline(labels[elements[0].index]);
+                    switchTab('timeline');
+                }
+            }
+        }
+    });
+
+    function switchTab(tabId) {
+        document.getElementById('tabTimeline').classList.remove('active');
+        document.getElementById('tabSource').classList.remove('active');
+        document.getElementById('newsList').style.display = 'none';
+        document.getElementById('sourceList').style.display = 'none';
+
+        if(tabId === 'timeline') {
+            document.getElementById('tabTimeline').classList.add('active');
+            document.getElementById('newsList').style.display = 'block';
+        } else {
+            document.getElementById('tabSource').classList.add('active');
+            document.getElementById('sourceList').style.display = 'block';
+            renderSourceList();
+        }
+    }
+
+    function renderTimeline(monthFilter = null) {
+        const listDiv = document.getElementById('newsList');
+        let filtered = monthFilter ? rawData.filter(d => d.monthKey === monthFilter) : rawData;
+
+        listDiv.innerHTML = `<div class="timeline">` + filtered.map(item => `
+            <div class="timeline-item ${item.sentiment}">
+                <div class="timeline-content">
+                    <div class="timeline-header">
+                        <div class="badge-group">
+                            <span class="badge media">📰 ${item.media}</span>
+                            <span class="badge ${item.sentiment === 'positive' ? 'pos' : 'neg'}">
+                                ${item.sentiment === 'positive' ? '🟢 正面聲量' : '🟠 負向報導'}
+                            </span>
+                        </div>
+                        <div class="timeline-date">🗓️ ${item.date}</div>
+                    </div>
+                    <div class="timeline-title">
+                        <a href="${item.link}" target="_blank">${item.title}</a> 
+                        <span class="link-icon">🔗 點擊閱讀</span>
+                    </div>
+                    <div class="timeline-summary">${item.summary}</div>
+                </div>
+            </div>
+        `).join('') + `</div>`;
+    }
+
+    function renderSourceList() {
+        const posItems = rawData.filter(d => d.sentiment === 'positive');
+        const negItems = rawData.filter(d => d.sentiment === 'negative');
+
+        const groupByMedia = (items) => {
+            const groups = {};
+            items.forEach(item => {
+                if (!groups[item.media]) groups[item.media] = [];
+                groups[item.media].push(item);
+            });
+            return Object.keys(groups)
+                .sort((a, b) => groups[b].length - groups[a].length)
+                .map(media => ({ media, articles: groups[media] }));
+        };
+
+        const generateGroupedHTML = (groupedItems) => {
+            return groupedItems.map(group => `
+                <div class="media-group">
+                    <div class="media-group-title">
+                        <span>📰 ${group.media}</span>
+                        <span class="media-count-badge">${group.articles.length} 筆</span>
+                    </div>
+                    ${group.articles.map(item => `
+                        <div class="source-item">
+                            <a href="${item.link}" target="_blank">${item.title}</a>
+                            <div class="source-date">${item.date}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `).join('');
+        };
+
+        document.getElementById('sourceList').innerHTML = `
+            <div class="source-grid">
+                <div class="source-col neg">
+                    <h3>🟠 負向報導媒體 (依數量排序)</h3>
+                    ${generateGroupedHTML(groupByMedia(negItems))}
+                </div>
+                <div class="source-col pos">
+                    <h3>🟢 正面聲量來源 (依數量排序)</h3>
+                    ${generateGroupedHTML(groupByMedia(posItems))}
+                </div>
+            </div>
+        `;
+    }
+
+    renderTimeline();
+</script>
+</body>
+</html>
